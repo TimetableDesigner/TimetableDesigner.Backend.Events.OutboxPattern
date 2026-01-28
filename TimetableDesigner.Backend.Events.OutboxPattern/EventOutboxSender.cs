@@ -1,49 +1,56 @@
 ﻿using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 namespace TimetableDesigner.Backend.Events.OutboxPattern;
 
 public class EventOutboxSender<TDbContext> : BackgroundService where TDbContext : DbContext, IEventOutboxDbContext
 {
-    private readonly TDbContext  _databaseContext;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IEventQueuePublisher _eventQueuePublisher;
     
-    public EventOutboxSender(TDbContext databaseContext, IEventQueuePublisher eventQueuePublisher)
+    public EventOutboxSender(IServiceScopeFactory serviceScopeFactory, IEventQueuePublisher eventQueuePublisher)
     {
-        _databaseContext = databaseContext;
+        _serviceScopeFactory = serviceScopeFactory;
         _eventQueuePublisher = eventQueuePublisher;
     }
     
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        using (IServiceScope scope = _serviceScopeFactory.CreateScope())
+        using (TDbContext dbContext = scope.ServiceProvider.GetRequiredService<TDbContext>())
         {
-            Event? eventData = await _databaseContext.Events.FirstOrDefaultAsync(x => x.LastRetryOn == null, stoppingToken)
-                            ?? await _databaseContext.Events.OrderBy(x => x.LastRetryOn).FirstOrDefaultAsync(stoppingToken);
-
-            if (eventData is null)
-            {
-                continue;
-            }
+            await dbContext.Database.EnsureCreatedAsync(stoppingToken);
             
-            Type payloadType = Type.GetType(eventData.PayloadType)!;
-            JsonSerializer.Deserialize(eventData.Payload, payloadType);
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                Event? eventData = await dbContext.Events.FirstOrDefaultAsync(x => x.LastRetryOn == null, stoppingToken)
+                                ?? await dbContext.Events.OrderBy(x => x.LastRetryOn).FirstOrDefaultAsync(stoppingToken);
 
-            try
-            {
-                await _eventQueuePublisher.PublishAsync(eventData.Payload, payloadType);
+                if (eventData is null)
+                {
+                    continue;
+                }
+            
+                Type payloadType = Type.GetType(eventData.PayloadType)!;
+                JsonSerializer.Deserialize(eventData.Payload, payloadType);
+
+                try
+                {
+                    await _eventQueuePublisher.PublishAsync(eventData.Payload, payloadType);
                     
-                _databaseContext.Events.Remove(eventData);
-            }
-            catch
-            {
-                eventData.LastRetryOn = DateTimeOffset.UtcNow;
-                eventData.RetryCount++;
-            }
-            finally
-            {
-                await _databaseContext.SaveChangesAsync(stoppingToken);
+                    dbContext.Events.Remove(eventData);
+                }
+                catch
+                {
+                    eventData.LastRetryOn = DateTimeOffset.UtcNow;
+                    eventData.RetryCount++;
+                }
+                finally
+                {
+                    await dbContext.SaveChangesAsync(stoppingToken);
+                }
             }
         }
     }
