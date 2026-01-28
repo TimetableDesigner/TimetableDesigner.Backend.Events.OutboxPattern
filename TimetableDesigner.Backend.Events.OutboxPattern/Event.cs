@@ -15,5 +15,5 @@ public class Event
     {
         Payload = JsonSerializer.Serialize<T>(payload);
         PayloadType = payload.GetType().FullName!;
-    }
+    };
 }
