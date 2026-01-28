@@ -4,7 +4,6 @@
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <Version />
         <Title>TimetableDesigner.Backend.Events.OutboxPattern</Title>
         <Authors>Mateusz Skoczek</Authors>
         <PackageProjectUrl>https://github.com/TimetableDesigner</PackageProjectUrl>
@@ -16,6 +15,13 @@
       <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.2" />
       <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.2" />
       <PackageReference Include="TimetableDesigner.Backend.Events" Version="1.1.4" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Update="icon.png">
+        <Pack>True</Pack>
+        <PackagePath></PackagePath>
+      </None>
     </ItemGroup>
 
 </Project>
