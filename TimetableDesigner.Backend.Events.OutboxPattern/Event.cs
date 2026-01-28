@@ -13,7 +13,7 @@ public class Event
     
     public static Event Create<T>(T payload) where T : class => new Event
     {
-        Payload = JsonSerializer.Serialize<T>(payload);
-        PayloadType = payload.GetType().FullName!;
+        Payload = JsonSerializer.Serialize<T>(payload),
+        PayloadType = payload.GetType().FullName!
     };
 }
