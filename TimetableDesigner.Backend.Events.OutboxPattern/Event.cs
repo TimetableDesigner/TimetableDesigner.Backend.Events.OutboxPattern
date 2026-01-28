@@ -11,9 +11,9 @@ public class Event
     public DateTimeOffset? LastRetryOn { get; set; }
     public uint RetryCount { get; set; }
     
-    public Event(object payload)
+    public static Event Create<T>(T payload) where T : class => new Event
     {
-        Payload = JsonSerializer.Serialize(payload);
-        PayloadType = payload.GetType().FullName!;
-    }
+        Payload = JsonSerializer.Serialize<T>(payload),
+        PayloadType = payload.GetType().FullName!
+    };
 }
