@@ -1,0 +1,100 @@
+name: Build and publish package
+
+on:
+  workflow_dispatch:
+    branches:
+      - "main"
+  push:
+    branches:
+      - "main"
+    paths:
+      - "TimetableDesigner.Backend.Events.OutboxPattern**"
+
+jobs:
+  build:
+    name: Build
+    runs-on: linux
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Add package source
+        run: dotnet nuget add source --name gitea --username TimetableDesigner --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text https://repos.mateuszskoczek.com/api/packages/TimetableDesigner/nuget/index.json
+      - name: Restore dependencies
+        run: dotnet restore
+      - name: Build
+        run: dotnet build --no-restore
+  version:
+    name: Determine version
+    runs-on: linux
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 10.0.x
+      - name: Setup GitVersion
+        uses: gittools/actions/gitversion/setup@v4.2.0
+        with:
+          versionSpec: 6.4.x
+      - name: Determine version
+        uses: gittools/actions/gitversion/execute@v4.2.0
+        id: gitversion
+        with:
+          configFilePath: ./.gitea/config/gitversion.yml
+    outputs: 
+      version: ${{ steps.gitversion.outputs.SemVer }}
+  pack:
+    name: Pack
+    runs-on: linux
+    needs: version
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 10.0.x
+      - name: Add package source
+        run: dotnet nuget add source --name gitea --username TimetableDesigner --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text https://repos.mateuszskoczek.com/api/packages/TimetableDesigner/nuget/index.json
+      - name: Create NuGet package
+        run: dotnet pack -c Release -p:Version=${{needs.version.outputs.version}} -p:PackageVersion=${{needs.version.outputs.version}} --output ./
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: nuget
+          path: ./TimetableDesigner.Backend.Events.OutboxPattern.${{needs.version.outputs.version}}.nupkg
+    outputs: 
+      version: ${{needs.version.outputs.version}}
+  publish:
+    name: Publish
+    runs-on: linux
+    needs: pack
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: nuget
+          path: ./
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 10.0.x
+      - name: Add package source
+        run: dotnet nuget add source --name gitea --username TimetableDesigner --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text https://repos.mateuszskoczek.com/api/packages/TimetableDesigner/nuget/index.json
+      - name: Publish
+        run: dotnet nuget push ./TimetableDesigner.Backend.Events.OutboxPattern.${{needs.pack.outputs.version}}.nupkg --source gitea --api-key ${{ secrets.PACKAGES_WRITE_TOKEN }} --skip-duplicate
+      - name: Create Release
+        uses: akkuman/gitea-release-action@v1
+        with:
+          tag_name: ${{needs.pack.outputs.version}}
+          name: ${{needs.pack.outputs.version}}
+          files: |-
+            TimetableDesigner.Backend.Events.OutboxPattern.${{needs.pack.outputs.version}}.nupkg
